@@ -33,6 +33,10 @@ def handle_client(conn, addr):
     print(f"New connection from {addr}")
     try:
         username = conn.recv(1024).decode().strip()
+        if username in usernames.values():
+            conn.sendall("VARATTU".encode())
+            conn.close()
+            return
         usernames[conn] = username
         clients.append(conn)
         user_channels[conn] = "#yleinen"
