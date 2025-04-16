@@ -12,6 +12,7 @@ server.listen()
 clients = []
 usernames = {}
 user_channels = {}
+channel_history = {}
 
 def write_to_log(text):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -21,6 +22,12 @@ def write_to_log(text):
 def broadcast(msg, sender_conn=None, channel=None):
     if not channel:
         channel = user_channels.get(sender_conn, "#yleinen")
+    if channel not in channel_history:
+        channel_history[channel] = []
+    channel_history[channel].append(msg)
+    if len(channel_history[channel]) > 10:
+        channel_history[channel] = channel_history[channel][-10:]
+
     write_to_log(f"{channel} | {msg}")
     for client in clients:
         if user_channels.get(client) == channel:
@@ -28,6 +35,14 @@ def broadcast(msg, sender_conn=None, channel=None):
                 client.sendall(msg.encode())
             except:
                 pass
+
+def send_channel_history(conn, channel):
+    try:
+        if channel in channel_history and channel_history[channel]:
+            for msg in channel_history[channel]:
+                conn.sendall((msg + '\n').encode())
+    except:
+        pass
 
 def handle_client(conn, addr):
     print(f"New connection from {addr}")
@@ -40,6 +55,8 @@ def handle_client(conn, addr):
         usernames[conn] = username
         clients.append(conn)
         user_channels[conn] = "#yleinen"
+
+        send_channel_history(conn, "#yleinen")
 
         welcome_msg = f"{username} liittyi kanavalle {user_channels[conn]}"
         print(welcome_msg)
@@ -59,6 +76,7 @@ def handle_client(conn, addr):
                 print(switch_msg)
                 broadcast(f"{usernames[conn]} poistui kanavalta {old_channel}", conn, old_channel)
                 broadcast(f"{usernames[conn]} liittyi kanavalle {new_channel}", conn, new_channel)
+                send_channel_history(conn, new_channel)
             else:
                 full_msg = f"{usernames[conn]}: {decoded_msg}"
                 print(f"{user_channels[conn]} | {full_msg}")
