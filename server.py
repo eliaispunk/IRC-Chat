@@ -64,7 +64,7 @@ def handle_client(conn, addr):
 
         send_channel_history(conn, "#yleinen")
 
-        welcome_msg = f"{username} liittyi kanavalle #yleinen"
+        welcome_msg = f"{username} joined channel #yleinen"
         print(welcome_msg)
         broadcast(welcome_msg, conn, "#yleinen", save_to_history=False)
 
@@ -89,12 +89,12 @@ def handle_client(conn, addr):
                         continue
 
                     user_channels[conn] = new_channel
-                    switch_msg = f"{usernames[conn]} siirtyi kanavalta {old_channel} kanavalle {new_channel}"
+                    switch_msg = f"{usernames[conn]} switched from {old_channel} to {new_channel}"
                     print(switch_msg)
 
                     # The sender has already moved, so this notice only reaches the old channel.
                     broadcast(
-                        f"{usernames[conn]} poistui kanavalta {old_channel}",
+                        f"{usernames[conn]} left channel {old_channel}",
                         conn,
                         old_channel,
                         save_to_history=False,
@@ -103,7 +103,7 @@ def handle_client(conn, addr):
                     # Send existing messages before the new join notice.
                     send_channel_history(conn, new_channel)
                     broadcast(
-                        f"{usernames[conn]} liittyi kanavalle {new_channel}",
+                        f"{usernames[conn]} joined channel {new_channel}",
                         conn,
                         new_channel,
                         save_to_history=False,
@@ -119,7 +119,7 @@ def handle_client(conn, addr):
         if conn in clients:
             clients.remove(conn)
             channel = user_channels.get(conn, "#yleinen")
-            leave_msg = f"{usernames.get(conn, 'Tuntematon')} poistui kanavalta {channel}"
+            leave_msg = f"{usernames.get(conn, 'Unknown')} left channel {channel}"
             print(leave_msg)
             # The disconnecting client has been removed, so only other users see this.
             broadcast(leave_msg, conn, channel, save_to_history=False)
