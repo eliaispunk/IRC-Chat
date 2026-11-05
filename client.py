@@ -1,3 +1,4 @@
+import random
 import socket
 import threading
 import tkinter as tk
@@ -35,58 +36,145 @@ if response != "OK":
 client.sendall("READY".encode())
 
 root.deiconify()
-root.title(f"Chat - {username}")
-root.configure(bg='#2b2b2b')
+root.title(f"IRC Chat - {username}")
+root.geometry("720x520")
+root.minsize(480, 360)
 
-BG_COLOR = "#2b2b2b"
-FG_COLOR = "#f1f1f1"
-ENTRY_BG = "#3c3f41"
-BUTTON_BG = "#4e5254"
-BUTTON_ACTIVE = "#5c6164"
+BG_COLOR = "#22272a"
+PANEL_COLOR = "#2c3337"
+CHAT_COLOR = "#171c1f"
+FG_COLOR = "#d7dfdc"
+MUTED_COLOR = "#9aa8a2"
+ACCENT_COLOR = "#93b7a0"
+ENTRY_COLOR = "#30383b"
+BUTTON_COLOR = "#43554c"
+BUTTON_ACTIVE = "#536b5f"
 
-chat_area = scrolledtext.ScrolledText(root, state='disabled', wrap=tk.WORD,
-                                      bg=ENTRY_BG, fg=FG_COLOR, insertbackground=FG_COLOR)
-chat_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+USER_COLORS = [
+    "#80cbc4", "#ffcc80", "#ef9a9a", "#b39ddb",
+    "#90caf9", "#c5e1a5", "#f48fb1", "#fff59d",
+    "#80deea", "#ce93d8", "#ffab91", "#a5d6a7",
+]
+random.shuffle(USER_COLORS)
+username_colors = {}
+available_colors = USER_COLORS.copy()
 
-msg_entry = tk.Entry(root, bg=ENTRY_BG, fg=FG_COLOR, insertbackground=FG_COLOR)
-msg_entry.pack(padx=10, pady=(0, 5), fill=tk.X)
+def user_tag_for(name):
+    if name not in username_colors:
+        if available_colors:
+            color = available_colors.pop()
+        else:
+            color = random.choice(USER_COLORS)
+        tag = f"user_{len(username_colors)}"
+        username_colors[name] = tag
+        chat_area.tag_configure(tag, foreground=color, font=("Consolas", 10, "bold"))
+    return username_colors[name]
 
-send_button = tk.Button(root, text="Lähetä", command=lambda: send_message(),
-                        bg=BUTTON_BG, fg=FG_COLOR, activebackground=BUTTON_ACTIVE)
-send_button.pack(padx=10, pady=(0, 10), fill=tk.X)
+root.configure(bg=BG_COLOR)
+
+header = tk.Frame(root, bg=PANEL_COLOR, padx=14, pady=10)
+header.pack(fill=tk.X, padx=10, pady=(10, 0))
+
+title_label = tk.Label(
+    header, text="IRC // CHAT", bg=PANEL_COLOR, fg=ACCENT_COLOR,
+    font=("Consolas", 13, "bold")
+)
+title_label.pack(side=tk.LEFT)
+
+account_label = tk.Label(
+    header, text=f"CONNECTED AS  {username}", bg=PANEL_COLOR,
+    fg=FG_COLOR, font=("Consolas", 9)
+)
+account_label.pack(side=tk.RIGHT)
+account_label.configure(fg=USER_COLORS[-1])
+
+chat_area = scrolledtext.ScrolledText(
+    root, state='disabled', wrap=tk.WORD,
+    bg=CHAT_COLOR, fg=FG_COLOR, insertbackground=FG_COLOR,
+    selectbackground=BUTTON_COLOR, relief=tk.FLAT, borderwidth=0,
+    padx=12, pady=10, font=("Consolas", 10), spacing1=2, spacing3=2
+)
+chat_area.pack(padx=10, pady=8, fill=tk.BOTH, expand=True)
+
+hint_label = tk.Label(
+    root, text="ENTER lähettää    •    /join #kanava vaihtaa kanavaa",
+    bg=BG_COLOR, fg=MUTED_COLOR, anchor=tk.W,
+    font=("Consolas", 8)
+)
+hint_label.pack(fill=tk.X, padx=12, pady=(0, 5))
+
+entry_row = tk.Frame(root, bg=BG_COLOR)
+entry_row.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+msg_entry = tk.Entry(
+    entry_row, bg=ENTRY_COLOR, fg=FG_COLOR, insertbackground=FG_COLOR,
+    relief=tk.FLAT, borderwidth=0, font=("Consolas", 10)
+)
+msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 8))
+
+def append_chat_line(line):
+    if not line:
+        return
+
+    username_in_line = None
+    message_part = line
+
+    if ": " in line:
+        username_in_line, message_part = line.split(": ", 1)
+        message_part = ": " + message_part
+    elif " liittyi kanavalle " in line or " poistui kanavalta " in line:
+        username_in_line, message_part = line.split(" ", 1)
+        message_part = " " + message_part
+
+    chat_area.config(state='normal')
+    if username_in_line:
+        chat_area.insert(tk.END, username_in_line, user_tag_for(username_in_line))
+        chat_area.insert(tk.END, message_part)
+    else:
+        chat_area.insert(tk.END, line)
+    chat_area.insert(tk.END, "\n")
+    chat_area.config(state='disabled')
+    chat_area.yview(tk.END)
 
 def send_message():
-    msg = msg_entry.get()
+    msg = msg_entry.get().strip()
     if msg:
-        client.sendall(msg.encode())
+        client.sendall((msg + "\n").encode())
 
         if not msg.startswith("/join "):
-            chat_area.config(state='normal')
-            chat_area.insert(tk.END, f"{username}: {msg}\n")
-            chat_area.config(state='disabled')
-            chat_area.yview(tk.END)
+            append_chat_line(f"{username}: {msg}")
 
         msg_entry.delete(0, tk.END)
 
         if msg.lower() == 'exit':
             root.quit()
 
+send_button = tk.Button(
+    entry_row, text="LÄHETÄ", command=send_message,
+    bg=BUTTON_COLOR, fg=FG_COLOR, activebackground=BUTTON_ACTIVE,
+    activeforeground=FG_COLOR, relief=tk.FLAT, borderwidth=0,
+    padx=16, pady=7, font=("Consolas", 9, "bold"), cursor="hand2"
+)
+send_button.pack(side=tk.RIGHT)
+
 def receive_messages():
+    buffer = ""
     while True:
         try:
-            msg = client.recv(1024)
-            if not msg:
+            data = client.recv(1024)
+            if not data:
                 break
-            decoded = msg.decode()
+            buffer += data.decode()
 
-            if not decoded.startswith(f"{username}:"):
-                chat_area.config(state='normal')
-                chat_area.insert(tk.END, decoded + '\n')
-                chat_area.config(state='disabled')
-                chat_area.yview(tk.END)
-
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                if line:
+                    root.after(0, append_chat_line, line)
         except:
             break
+
+    if buffer:
+        root.after(0, append_chat_line, buffer)
 
 threading.Thread(target=receive_messages, daemon=True).start()
 msg_entry.bind("<Return>", lambda event: send_message())
