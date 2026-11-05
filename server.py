@@ -33,7 +33,7 @@ def broadcast(msg, sender_conn=None, channel=None, save_to_history=True):
     for client in clients:
         if user_channels.get(client) == channel:
             try:
-                client.sendall(msg.encode())
+                client.sendall((msg + '\n').encode())
             except:
                 pass
 
@@ -68,43 +68,50 @@ def handle_client(conn, addr):
         print(welcome_msg)
         broadcast(welcome_msg, conn, "#yleinen", save_to_history=False)
 
+        buffer = ""
         while True:
-            msg = conn.recv(1024)
-            if not msg:
+            data = conn.recv(1024)
+            if not data:
                 break
-            decoded_msg = msg.decode().strip()
+            buffer += data.decode()
 
-            if decoded_msg.startswith("/join "):
-                new_channel = decoded_msg.split(" ", 1)[1].strip()
-                old_channel = user_channels[conn]
-
-                if not new_channel or new_channel == old_channel:
+            while '\n' in buffer:
+                decoded_msg, buffer = buffer.split('\n', 1)
+                decoded_msg = decoded_msg.strip()
+                if not decoded_msg:
                     continue
 
-                user_channels[conn] = new_channel
-                switch_msg = f"{usernames[conn]} siirtyi kanavalta {old_channel} kanavalle {new_channel}"
-                print(switch_msg)
+                if decoded_msg.startswith("/join "):
+                    new_channel = decoded_msg.split(" ", 1)[1].strip()
+                    old_channel = user_channels[conn]
 
-                # The sender has already moved, so this notice only reaches the old channel.
-                broadcast(
-                    f"{usernames[conn]} poistui kanavalta {old_channel}",
-                    conn,
-                    old_channel,
-                    save_to_history=False,
-                )
+                    if not new_channel or new_channel == old_channel:
+                        continue
 
-                # Send existing messages before the new join notice.
-                send_channel_history(conn, new_channel)
-                broadcast(
-                    f"{usernames[conn]} liittyi kanavalle {new_channel}",
-                    conn,
-                    new_channel,
-                    save_to_history=False,
-                )
-            else:
-                full_msg = f"{usernames[conn]}: {decoded_msg}"
-                print(f"{user_channels[conn]} | {full_msg}")
-                broadcast(full_msg, conn, user_channels[conn])
+                    user_channels[conn] = new_channel
+                    switch_msg = f"{usernames[conn]} siirtyi kanavalta {old_channel} kanavalle {new_channel}"
+                    print(switch_msg)
+
+                    # The sender has already moved, so this notice only reaches the old channel.
+                    broadcast(
+                        f"{usernames[conn]} poistui kanavalta {old_channel}",
+                        conn,
+                        old_channel,
+                        save_to_history=False,
+                    )
+
+                    # Send existing messages before the new join notice.
+                    send_channel_history(conn, new_channel)
+                    broadcast(
+                        f"{usernames[conn]} liittyi kanavalle {new_channel}",
+                        conn,
+                        new_channel,
+                        save_to_history=False,
+                    )
+                else:
+                    full_msg = f"{usernames[conn]}: {decoded_msg}"
+                    print(f"{user_channels[conn]} | {full_msg}")
+                    broadcast(full_msg, conn, user_channels[conn])
 
     except:
         pass
