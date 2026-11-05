@@ -49,19 +49,24 @@ def handle_client(conn, addr):
     print(f"New connection from {addr}")
     try:
         username = conn.recv(1024).decode().strip()
-        if username in usernames.values():
+        if not username or username in usernames.values():
             conn.sendall("VARATTU".encode())
-            conn.close()
             return
+
+        # Reserve the username while the client completes the handshake.
         usernames[conn] = username
+        conn.sendall("OK".encode())
+        if conn.recv(1024).decode().strip() != "READY":
+            return
+
         clients.append(conn)
         user_channels[conn] = "#yleinen"
 
         send_channel_history(conn, "#yleinen")
 
-        welcome_msg = f"{username} liittyi kanavalle {user_channels[conn]}"
+        welcome_msg = f"{username} liittyi kanavalle #yleinen"
         print(welcome_msg)
-        broadcast(welcome_msg, conn, user_channels[conn], save_to_history=False)
+        broadcast(welcome_msg, conn, "#yleinen", save_to_history=False)
 
         while True:
             msg = conn.recv(1024)
@@ -79,6 +84,8 @@ def handle_client(conn, addr):
                 user_channels[conn] = new_channel
                 switch_msg = f"{usernames[conn]} siirtyi kanavalta {old_channel} kanavalle {new_channel}"
                 print(switch_msg)
+
+                # The sender has already moved, so this notice only reaches the old channel.
                 broadcast(
                     f"{usernames[conn]} poistui kanavalta {old_channel}",
                     conn,
@@ -86,7 +93,7 @@ def handle_client(conn, addr):
                     save_to_history=False,
                 )
 
-                # Send existing messages before notifying the channel about this join.
+                # Send existing messages before the new join notice.
                 send_channel_history(conn, new_channel)
                 broadcast(
                     f"{usernames[conn]} liittyi kanavalle {new_channel}",
@@ -104,13 +111,14 @@ def handle_client(conn, addr):
     finally:
         if conn in clients:
             clients.remove(conn)
-        channel = user_channels.get(conn, "#yleinen")
-        leave_msg = f"{usernames.get(conn, 'Tuntematon')} poistui kanavalta {channel}"
-        print(leave_msg)
-        broadcast(leave_msg, conn, channel, save_to_history=False)
-        conn.close()
+            channel = user_channels.get(conn, "#yleinen")
+            leave_msg = f"{usernames.get(conn, 'Tuntematon')} poistui kanavalta {channel}"
+            print(leave_msg)
+            # The disconnecting client has been removed, so only other users see this.
+            broadcast(leave_msg, conn, channel, save_to_history=False)
         usernames.pop(conn, None)
         user_channels.pop(conn, None)
+        conn.close()
 
 print(f"Server listening on {HOST}:{PORT}...")
 
