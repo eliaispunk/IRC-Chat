@@ -13,14 +13,26 @@ root.withdraw()
 
 username = simpledialog.askstring("Käyttäjänimi", "Syötä käyttäjänimesi:", parent=root)
 if not username:
+    client.close()
+    root.destroy()
     exit()
 
 client.sendall(username.encode())
 response = client.recv(1024).decode()
 if response == "VARATTU":
     messagebox.showerror("Virhe", "Käyttäjänimi on jo varattu.")
+    client.close()
     root.destroy()
     exit()
+
+if response != "OK":
+    messagebox.showerror("Virhe", "Palvelimelta ei saatu kelvollista vastausta.")
+    client.close()
+    root.destroy()
+    exit()
+
+# The server waits for READY before sending history and the join notice.
+client.sendall("READY".encode())
 
 root.deiconify()
 root.title(f"Chat - {username}")
@@ -32,7 +44,7 @@ ENTRY_BG = "#3c3f41"
 BUTTON_BG = "#4e5254"
 BUTTON_ACTIVE = "#5c6164"
 
-chat_area = scrolledtext.ScrolledText(root, state='disabled', wrap=tk.WORD, 
+chat_area = scrolledtext.ScrolledText(root, state='disabled', wrap=tk.WORD,
                                       bg=ENTRY_BG, fg=FG_COLOR, insertbackground=FG_COLOR)
 chat_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
