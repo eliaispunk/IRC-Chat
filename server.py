@@ -19,14 +19,15 @@ def write_to_log(text):
     with open("chatlog.txt", "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {text}\n")
 
-def broadcast(msg, sender_conn=None, channel=None):
+def broadcast(msg, sender_conn=None, channel=None, save_to_history=True):
     if not channel:
         channel = user_channels.get(sender_conn, "#yleinen")
-    if channel not in channel_history:
-        channel_history[channel] = []
-    channel_history[channel].append(msg)
-    if len(channel_history[channel]) > 10:
-        channel_history[channel] = channel_history[channel][-10:]
+    if save_to_history:
+        if channel not in channel_history:
+            channel_history[channel] = []
+        channel_history[channel].append(msg)
+        if len(channel_history[channel]) > 10:
+            channel_history[channel] = channel_history[channel][-10:]
 
     write_to_log(f"{channel} | {msg}")
     for client in clients:
@@ -60,7 +61,7 @@ def handle_client(conn, addr):
 
         welcome_msg = f"{username} liittyi kanavalle {user_channels[conn]}"
         print(welcome_msg)
-        broadcast(welcome_msg, conn, user_channels[conn])
+        broadcast(welcome_msg, conn, user_channels[conn], save_to_history=False)
 
         while True:
             msg = conn.recv(1024)
@@ -78,12 +79,21 @@ def handle_client(conn, addr):
                 user_channels[conn] = new_channel
                 switch_msg = f"{usernames[conn]} siirtyi kanavalta {old_channel} kanavalle {new_channel}"
                 print(switch_msg)
-                broadcast(f"{usernames[conn]} poistui kanavalta {old_channel}", conn, old_channel)
+                broadcast(
+                    f"{usernames[conn]} poistui kanavalta {old_channel}",
+                    conn,
+                    old_channel,
+                    save_to_history=False,
+                )
 
-                # Send existing history before broadcasting the new join notice,
-                # so that notice is not sent once live and again from history.
+                # Send existing messages before notifying the channel about this join.
                 send_channel_history(conn, new_channel)
-                broadcast(f"{usernames[conn]} liittyi kanavalle {new_channel}", conn, new_channel)
+                broadcast(
+                    f"{usernames[conn]} liittyi kanavalle {new_channel}",
+                    conn,
+                    new_channel,
+                    save_to_history=False,
+                )
             else:
                 full_msg = f"{usernames[conn]}: {decoded_msg}"
                 print(f"{user_channels[conn]} | {full_msg}")
@@ -97,7 +107,7 @@ def handle_client(conn, addr):
         channel = user_channels.get(conn, "#yleinen")
         leave_msg = f"{usernames.get(conn, 'Tuntematon')} poistui kanavalta {channel}"
         print(leave_msg)
-        broadcast(leave_msg, conn, channel)
+        broadcast(leave_msg, conn, channel, save_to_history=False)
         conn.close()
         usernames.pop(conn, None)
         user_channels.pop(conn, None)
