@@ -69,14 +69,21 @@ def handle_client(conn, addr):
             decoded_msg = msg.decode().strip()
 
             if decoded_msg.startswith("/join "):
-                new_channel = decoded_msg.split(" ", 1)[1]
+                new_channel = decoded_msg.split(" ", 1)[1].strip()
                 old_channel = user_channels[conn]
+
+                if not new_channel or new_channel == old_channel:
+                    continue
+
                 user_channels[conn] = new_channel
                 switch_msg = f"{usernames[conn]} siirtyi kanavalta {old_channel} kanavalle {new_channel}"
                 print(switch_msg)
                 broadcast(f"{usernames[conn]} poistui kanavalta {old_channel}", conn, old_channel)
-                broadcast(f"{usernames[conn]} liittyi kanavalle {new_channel}", conn, new_channel)
+
+                # Send existing history before broadcasting the new join notice,
+                # so that notice is not sent once live and again from history.
                 send_channel_history(conn, new_channel)
+                broadcast(f"{usernames[conn]} liittyi kanavalle {new_channel}", conn, new_channel)
             else:
                 full_msg = f"{usernames[conn]}: {decoded_msg}"
                 print(f"{user_channels[conn]} | {full_msg}")
