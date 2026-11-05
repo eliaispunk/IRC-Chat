@@ -4,6 +4,11 @@ import threading
 import tkinter as tk
 from tkinter import simpledialog, scrolledtext, messagebox
 
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
 HOST = '127.0.0.1'
 PORT = 6667
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -57,18 +62,8 @@ USER_COLORS = [
 ]
 random.shuffle(USER_COLORS)
 username_colors = {}
+username_tags = {}
 available_colors = USER_COLORS.copy()
-
-def user_tag_for(name):
-    if name not in username_colors:
-        if available_colors:
-            color = available_colors.pop()
-        else:
-            color = random.choice(USER_COLORS)
-        tag = f"user_{len(username_colors)}"
-        username_colors[name] = tag
-        chat_area.tag_configure(tag, foreground=color, font=("Consolas", 10, "bold"))
-    return username_colors[name]
 
 root.configure(bg=BG_COLOR)
 
@@ -81,12 +76,21 @@ title_label = tk.Label(
 )
 title_label.pack(side=tk.LEFT)
 
+sound_enabled = tk.BooleanVar(value=True)
+sound_toggle = tk.Checkbutton(
+    header, text="BLING", variable=sound_enabled,
+    bg=PANEL_COLOR, fg=MUTED_COLOR, selectcolor=ENTRY_COLOR,
+    activebackground=PANEL_COLOR, activeforeground=FG_COLOR,
+    font=("Consolas", 8, "bold"), relief=tk.FLAT, borderwidth=0,
+    cursor="hand2"
+)
+sound_toggle.pack(side=tk.RIGHT, padx=(12, 0))
+
 account_label = tk.Label(
     header, text=f"CONNECTED AS  {username}", bg=PANEL_COLOR,
     fg=FG_COLOR, font=("Consolas", 9)
 )
 account_label.pack(side=tk.RIGHT)
-account_label.configure(fg=USER_COLORS[-1])
 
 chat_area = scrolledtext.ScrolledText(
     root, state='disabled', wrap=tk.WORD,
@@ -95,6 +99,20 @@ chat_area = scrolledtext.ScrolledText(
     padx=12, pady=10, font=("Consolas", 10), spacing1=2, spacing3=2
 )
 chat_area.pack(padx=10, pady=8, fill=tk.BOTH, expand=True)
+
+def ensure_user_style(name):
+    if name not in username_colors:
+        if available_colors:
+            color = available_colors.pop()
+        else:
+            color = random.choice(USER_COLORS)
+        tag = f"user_{len(username_colors)}"
+        username_colors[name] = color
+        username_tags[name] = tag
+        chat_area.tag_configure(tag, foreground=color, font=("Consolas", 10, "bold"))
+    return username_colors[name], username_tags[name]
+
+account_label.configure(fg=ensure_user_style(username)[0])
 
 hint_label = tk.Label(
     root, text="ENTER lähettää    •    /join #kanava vaihtaa kanavaa",
@@ -112,29 +130,53 @@ msg_entry = tk.Entry(
 )
 msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 8))
 
-def append_chat_line(line):
+def play_bling():
+    if not sound_enabled.get():
+        return
+
+    if winsound is None:
+        root.bell()
+        return
+
+    def play_tones():
+        try:
+            winsound.Beep(880, 75)
+            winsound.Beep(1175, 100)
+        except RuntimeError:
+            pass
+
+    threading.Thread(target=play_tones, daemon=True).start()
+
+def append_chat_line(line, play_sound=False):
     if not line:
         return
 
     username_in_line = None
     message_part = line
+    is_chat_message = False
 
     if ": " in line:
         username_in_line, message_part = line.split(": ", 1)
         message_part = ": " + message_part
+        is_chat_message = True
     elif " liittyi kanavalle " in line or " poistui kanavalta " in line:
         username_in_line, message_part = line.split(" ", 1)
         message_part = " " + message_part
 
     chat_area.config(state='normal')
     if username_in_line:
-        chat_area.insert(tk.END, username_in_line, user_tag_for(username_in_line))
+        _, user_tag = ensure_user_style(username_in_line)
+        chat_area.insert(tk.END, username_in_line, user_tag)
         chat_area.insert(tk.END, message_part)
     else:
         chat_area.insert(tk.END, line)
     chat_area.insert(tk.END, "\n")
     chat_area.config(state='disabled')
     chat_area.yview(tk.END)
+
+    # Only play for another user's chat message, not local echoes or join notices.
+    if play_sound and is_chat_message and username_in_line != username:
+        play_bling()
 
 def send_message():
     msg = msg_entry.get().strip()
@@ -168,13 +210,13 @@ def receive_messages():
 
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
-                if line:
-                    root.after(0, append_chat_line, line)
+                if line and not line.startswith(f"{username}: "):
+                    root.after(0, append_chat_line, line, True)
         except:
             break
 
-    if buffer:
-        root.after(0, append_chat_line, buffer)
+    if buffer and not buffer.startswith(f"{username}: "):
+        root.after(0, append_chat_line, buffer, True)
 
 threading.Thread(target=receive_messages, daemon=True).start()
 msg_entry.bind("<Return>", lambda event: send_message())
